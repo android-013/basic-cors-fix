@@ -3,53 +3,96 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CORS Test</title>
+  <title>Auth Mock (CORS Safe)</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 24px; line-height: 1.4; }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
-    button { padding: 10px 14px; cursor: pointer; }
-    code, pre { background: #f4f4f4; padding: 8px; border-radius: 6px; }
-    pre { overflow: auto; }
-    .card { border: 1px solid #ddd; padding: 14px; border-radius: 10px; max-width: 900px; }
-    .muted { color: #666; }
+    body { font-family: Arial, sans-serif; margin: 28px; background: #fafafa; color: #111; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    .top { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+    h1 { font-size: 20px; margin: 0; }
+    .muted { color: #666; font-size: 13px; }
+    label { display: block; font-size: 13px; color: #333; margin: 10px 0 6px; }
+    input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; }
+    button { padding: 10px 12px; border: 1px solid #ddd; background: #111; color: #fff; border-radius: 10px; cursor: pointer; }
+    button.secondary { background: #fff; color: #111; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+    .pill { font-size: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid #ddd; background: #fff; }
+    pre { background: #0b1020; color: #d7e1ff; padding: 14px; border-radius: 12px; overflow: auto; font-size: 12px; line-height: 1.4; }
     .ok { color: #0a7a0a; font-weight: 600; }
     .bad { color: #b00020; font-weight: 600; }
-    input { padding: 8px; width: 360px; max-width: 90vw; }
+    .status { margin-left: auto; }
   </style>
 </head>
 <body>
-  <h1>CORS Error Test (Frontend)</h1>
-
-  <div class="card">
-    <div class="muted">Current page origin:</div>
-    <pre id="origin"></pre>
-
-    <div class="row">
-      <label>
-        Backend Base URL:
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Signup / Sign-in Mock (CORS-Safe)</h1>
+        <div class="muted">Frontend origin: <span id="origin"></span></div>
+      </div>
+      <div class="card" style="min-width: 320px;">
+        <label>Backend Base URL</label>
         <input id="baseUrl" value="http://localhost:4000" />
-      </label>
+        <div class="row">
+          <span class="pill">Token: <span id="tokenState">none</span></span>
+          <span class="status" id="status"></span>
+        </div>
+      </div>
     </div>
 
-    <div class="row">
-      <button id="btnHealth">GET /api/health</button>
-      <button id="btnHello">GET /api/hello</button>
-      <button id="btnEcho">POST /api/echo</button>
-      <button id="btnClear">Clear Output</button>
+    <div class="grid">
+      <div class="card">
+        <h2 style="margin:0 0 8px; font-size:16px;">Create Account</h2>
+        <div class="muted">Stored temporarily in backend/user.json (do not treat it as permanent storage).</div>
+
+        <label>Name</label>
+        <input id="suName" placeholder="e.g., Jane Doe" />
+
+        <label>Email</label>
+        <input id="suEmail" placeholder="e.g., jane@example.com" />
+
+        <label>Password</label>
+        <input id="suPassword" type="password" placeholder="Minimum 8 characters" />
+
+        <div class="row">
+          <button id="btnSignup">Sign up</button>
+          <button class="secondary" id="btnHealth">Check API health</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin:0 0 8px; font-size:16px;">Sign In</h2>
+
+        <label>Email</label>
+        <input id="siEmail" placeholder="e.g., jane@example.com" />
+
+        <label>Password</label>
+        <input id="siPassword" type="password" placeholder="Your password" />
+
+        <div class="row">
+          <button id="btnSignin">Sign in</button>
+          <button class="secondary" id="btnMe">Get /api/me</button>
+          <button class="secondary" id="btnLogout">Logout</button>
+          <button class="secondary" id="btnClear">Clear log</button>
+        </div>
+      </div>
     </div>
 
-    <div class="muted">Result:</div>
-    <pre id="out"></pre>
-
-    <div class="muted">Status:</div>
-    <div id="status"></div>
+    <div class="card" style="margin-top:16px;">
+      <div class="muted">Output</div>
+      <pre id="out">{}</pre>
+    </div>
   </div>
 
   <script>
     const originEl = document.getElementById("origin");
+    const baseUrlEl = document.getElementById("baseUrl");
     const outEl = document.getElementById("out");
     const statusEl = document.getElementById("status");
-    const baseUrlEl = document.getElementById("baseUrl");
+    const tokenStateEl = document.getElementById("tokenState");
 
     originEl.textContent = window.location.origin;
 
@@ -57,45 +100,90 @@
       statusEl.innerHTML = `<span class="${ok ? "ok" : "bad"}">${text}</span>`;
     }
 
-    function log(obj) {
-      const current = outEl.textContent.trim();
-      outEl.textContent = (current ? current + "\n\n" : "") + JSON.stringify(obj, null, 2);
+    function setLog(obj) {
+      outEl.textContent = JSON.stringify(obj, null, 2);
     }
 
-    async function doFetch(path, options = {}) {
-      const baseUrl = baseUrlEl.value.replace(/\/$/, "");
-      const url = baseUrl + path;
+    function getToken() {
+      return localStorage.getItem("auth_token") || "";
+    }
+
+    function setToken(token) {
+      if (token) localStorage.setItem("auth_token", token);
+      else localStorage.removeItem("auth_token");
+      tokenStateEl.textContent = token ? "present" : "none";
+    }
+
+    tokenStateEl.textContent = getToken() ? "present" : "none";
+
+    async function api(path, options = {}) {
+      const base = baseUrlEl.value.replace(/\/$/, "");
+      const url = base + path;
+
+      const headers = Object.assign(
+        { "Content-Type": "application/json" },
+        options.headers || {}
+      );
+
+      const token = getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       setStatus(true, "Request sent...");
       try {
         const res = await fetch(url, {
           mode: "cors",
-          ...options
+          ...options,
+          headers
         });
 
         const text = await res.text();
         let data;
         try { data = JSON.parse(text); } catch { data = { raw: text }; }
 
-        log({ url, status: res.status, ok: res.ok, data });
-        setStatus(res.ok, res.ok ? "Success" : "Request failed (check response)");
+        setLog({ url, status: res.status, ok: res.ok, data });
+        setStatus(res.ok, res.ok ? "Success" : "Request failed (see output)");
+        return { res, data };
       } catch (e) {
-        log({ url, error: String(e) });
-        setStatus(false, "Blocked by browser (likely CORS) or network error");
+        setLog({ url, error: String(e) });
+        setStatus(false, "Blocked by browser (CORS) or network error");
+        return null;
       }
     }
 
-    document.getElementById("btnHealth").onclick = () => doFetch("/api/health");
-    document.getElementById("btnHello").onclick = () => doFetch("/api/hello");
-    document.getElementById("btnEcho").onclick = () =>
-      doFetch("/api/echo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "Testing POST + preflight", at: new Date().toISOString() })
-      });
+    document.getElementById("btnHealth").onclick = () => api("/api/health", { method: "GET" });
+
+    document.getElementById("btnSignup").onclick = async () => {
+      const payload = {
+        name: document.getElementById("suName").value.trim(),
+        email: document.getElementById("suEmail").value.trim(),
+        password: document.getElementById("suPassword").value
+      };
+      await api("/api/auth/signup", { method: "POST", body: JSON.stringify(payload) });
+    };
+
+    document.getElementById("btnSignin").onclick = async () => {
+      const payload = {
+        email: document.getElementById("siEmail").value.trim(),
+        password: document.getElementById("siPassword").value
+      };
+      const result = await api("/api/auth/signin", { method: "POST", body: JSON.stringify(payload) });
+      if (result && result.data && result.data.ok && result.data.token) {
+        setToken(result.data.token);
+        setStatus(true, "Signed in (token stored)");
+      }
+    };
+
+    document.getElementById("btnMe").onclick = async () => {
+      await api("/api/me", { method: "GET" });
+    };
+
+    document.getElementById("btnLogout").onclick = () => {
+      setToken("");
+      setStatus(true, "Logged out (token cleared)");
+    };
 
     document.getElementById("btnClear").onclick = () => {
-      outEl.textContent = "";
+      setLog({});
       setStatus(true, "Cleared");
     };
   </script>
