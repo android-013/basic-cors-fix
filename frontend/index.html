@@ -5,100 +5,98 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>CORS Test</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 24px; max-width: 900px; margin: 0 auto; }
-    .card { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 12px 0; }
-    label { display: block; font-size: 14px; margin-bottom: 6px; }
-    input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
-    button { padding: 10px 14px; margin: 6px 6px 0 0; border: 1px solid #333; border-radius: 8px; background: #fff; cursor: pointer; }
-    button:hover { background: #f5f5f5; }
-    pre { background: #111; color: #ddd; padding: 12px; border-radius: 10px; overflow: auto; }
-    .hint { color: #444; font-size: 13px; line-height: 1.4; }
+    body { font-family: Arial, sans-serif; margin: 24px; line-height: 1.4; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+    button { padding: 10px 14px; cursor: pointer; }
+    code, pre { background: #f4f4f4; padding: 8px; border-radius: 6px; }
+    pre { overflow: auto; }
+    .card { border: 1px solid #ddd; padding: 14px; border-radius: 10px; max-width: 900px; }
+    .muted { color: #666; }
+    .ok { color: #0a7a0a; font-weight: 600; }
+    .bad { color: #b00020; font-weight: 600; }
+    input { padding: 8px; width: 360px; max-width: 90vw; }
   </style>
 </head>
 <body>
-  <h2>CORS Test Page</h2>
+  <h1>CORS Error Test (Frontend)</h1>
 
   <div class="card">
-    <label for="api">Backend API Base URL</label>
-    <input id="api" value="http://localhost:4000" />
-    <p class="hint">
-      This page must be served from an origin such as <b>http://localhost:5173</b> (not opened as a local file),
-      otherwise the browser origin may become <b>null</b> and testing becomes misleading.
-    </p>
-  </div>
+    <div class="muted">Current page origin:</div>
+    <pre id="origin"></pre>
 
-  <div class="card">
-    <button id="ping">Ping (GET /api/ping)</button>
-    <button id="preflight">Preflight Test (custom header)</button>
-    <button id="login">Login (POST /api/login, set cookie)</button>
-    <button id="me">Me (GET /api/me, read cookie)</button>
-  </div>
+    <div class="row">
+      <label>
+        Backend Base URL:
+        <input id="baseUrl" value="http://localhost:4000" />
+      </label>
+    </div>
 
-  <pre id="out">Output will appear here.</pre>
+    <div class="row">
+      <button id="btnHealth">GET /api/health</button>
+      <button id="btnHello">GET /api/hello</button>
+      <button id="btnEcho">POST /api/echo</button>
+      <button id="btnClear">Clear Output</button>
+    </div>
+
+    <div class="muted">Result:</div>
+    <pre id="out"></pre>
+
+    <div class="muted">Status:</div>
+    <div id="status"></div>
+  </div>
 
   <script>
-    const out = document.getElementById("out");
-    const apiInput = document.getElementById("api");
+    const originEl = document.getElementById("origin");
+    const outEl = document.getElementById("out");
+    const statusEl = document.getElementById("status");
+    const baseUrlEl = document.getElementById("baseUrl");
 
-    function print(value) {
-      out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    originEl.textContent = window.location.origin;
+
+    function setStatus(ok, text) {
+      statusEl.innerHTML = `<span class="${ok ? "ok" : "bad"}">${text}</span>`;
     }
 
-    async function request(path, options = {}) {
-      const base = apiInput.value.trim().replace(/\/+$/, "");
-      const url = base + path;
+    function log(obj) {
+      const current = outEl.textContent.trim();
+      outEl.textContent = (current ? current + "\n\n" : "") + JSON.stringify(obj, null, 2);
+    }
 
-      const res = await fetch(url, {
-        ...options,
-        credentials: "include" // makes CORS stricter (requires exact origin, no "*")
+    async function doFetch(path, options = {}) {
+      const baseUrl = baseUrlEl.value.replace(/\/$/, "");
+      const url = baseUrl + path;
+
+      setStatus(true, "Request sent...");
+      try {
+        const res = await fetch(url, {
+          mode: "cors",
+          ...options
+        });
+
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+        log({ url, status: res.status, ok: res.ok, data });
+        setStatus(res.ok, res.ok ? "Success" : "Request failed (check response)");
+      } catch (e) {
+        log({ url, error: String(e) });
+        setStatus(false, "Blocked by browser (likely CORS) or network error");
+      }
+    }
+
+    document.getElementById("btnHealth").onclick = () => doFetch("/api/health");
+    document.getElementById("btnHello").onclick = () => doFetch("/api/hello");
+    document.getElementById("btnEcho").onclick = () =>
+      doFetch("/api/echo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Testing POST + preflight", at: new Date().toISOString() })
       });
 
-      const data = await res.json().catch(() => ({}));
-      return { status: res.status, data };
-    }
-
-    document.getElementById("ping").onclick = async () => {
-      try {
-        const result = await request("/api/ping");
-        print(result);
-      } catch (e) {
-        print(String(e));
-      }
-    };
-
-    // custom header forces browser preflight (OPTIONS)
-    document.getElementById("preflight").onclick = async () => {
-      try {
-        const result = await request("/api/ping", {
-          method: "GET",
-          headers: { "X-Debug-Header": "trigger-preflight" }
-        });
-        print(result);
-      } catch (e) {
-        print(String(e));
-      }
-    };
-
-    document.getElementById("login").onclick = async () => {
-      try {
-        const result = await request("/api/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user: "demo" })
-        });
-        print(result);
-      } catch (e) {
-        print(String(e));
-      }
-    };
-
-    document.getElementById("me").onclick = async () => {
-      try {
-        const result = await request("/api/me");
-        print(result);
-      } catch (e) {
-        print(String(e));
-      }
+    document.getElementById("btnClear").onclick = () => {
+      outEl.textContent = "";
+      setStatus(true, "Cleared");
     };
   </script>
 </body>
