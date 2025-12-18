@@ -11,6 +11,8 @@
     "name": "abc",
     "email": "abc@abc.com",
     "passwordHash": "$2a$12$tOpumRhc6FZs9mZJZ3eqV.mD4lAXekYwpcqCOMvnT0VIAqLpLQ1j2",
-    "createdAt": "2025-12-18T10:50:24.687Z"
+    "createdAt": "2025-12-18T10:50:24.687Z",
+    "refreshTokenHash": "$2a$10$1lmHQk9cX0VMwWPangKVFuC.Z9JXq0fDpI4dMz80CMI20AS/6jFEG",
+    "refreshIssuedAt": "2025-12-18T11:27:18.873Z"
   }
 ]
