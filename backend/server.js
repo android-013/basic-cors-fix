@@ -1,7 +1,7 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import cookieParser from "cookie-parser";
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const cookieParser = require("cookie-parser");
 
 dotenv.config();
 
@@ -9,7 +9,6 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 
-// Choose port + client origin based on environment
 const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
 
 const PORT = isProd
@@ -23,7 +22,6 @@ const CLIENT_ORIGIN = isProd
 const CORS_MODE = process.env.CORS_MODE || "broken";
 const BROKEN_ORIGIN = process.env.BROKEN_ORIGIN || "http://localhost:3000";
 
-// In broken mode we allow the wrong origin on purpose
 const allowedOrigins =
   CORS_MODE === "fixed"
     ? [CLIENT_ORIGIN]
@@ -31,9 +29,7 @@ const allowedOrigins =
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow non-browser tools (curl/postman) which may not send Origin header
     if (!origin) return callback(null, true);
-
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error(`CORS blocked origin: ${origin}`), false);
   },
@@ -43,7 +39,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // ensure preflight works
+app.options("*", cors(corsOptions));
 
 app.get("/api/ping", (req, res) => {
   res.json({
@@ -55,12 +51,11 @@ app.get("/api/ping", (req, res) => {
   });
 });
 
-// Cookie route to validate credentials + CORS
 app.post("/api/login", (req, res) => {
   res.cookie("session", "demo-session", {
     httpOnly: true,
     sameSite: "lax",
-    secure: isProd // set true in production (HTTPS)
+    secure: isProd
   });
   res.json({ ok: true, message: "Session cookie set" });
 });
@@ -69,7 +64,6 @@ app.get("/api/me", (req, res) => {
   res.json({ ok: true, hasSession: Boolean(req.cookies.session) });
 });
 
-// Visible error to confirm CORS rejection server-side
 app.use((err, req, res, next) => {
   console.error(err.message);
   res.status(500).json({ ok: false, error: err.message });
