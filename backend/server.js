@@ -1,76 +1,84 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
-const cookieParser = require("cookie-parser");
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
-app.use(cookieParser());
 
-const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
+const PORT = Number(process.env.PORT || 4000);
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
 
-const PORT = isProd
-  ? Number(process.env.PORT_PROD || 8080)
-  : Number(process.env.PORT_LOCAL || 4000);
+const allowCredentials = String(process.env.CORS_CREDENTIALS || "false").toLowerCase() === "true";
 
-const CLIENT_ORIGIN = isProd
-  ? (process.env.CLIENT_ORIGIN_PROD || "")
-  : (process.env.CLIENT_ORIGIN_LOCAL || "");
+/**
+ * CORS setup:
+ * - Allows only origins listed in ALLOWED_ORIGINS
+ * - Properly handles preflight (OPTIONS)
+ */
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // If you open frontend with file://, origin becomes undefined or "null" depending on the browser.
+      // We intentionally reject that to keep behavior predictable.
+      if (!origin) {
+        return callback(new Error("CORS blocked: missing Origin. Serve frontend via http:// (not file://)."));
+      }
 
-const CORS_MODE = process.env.CORS_MODE || "broken";
-const BROKEN_ORIGIN = process.env.BROKEN_ORIGIN || "http://localhost:3000";
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-const allowedOrigins =
-  CORS_MODE === "fixed"
-    ? [CLIENT_ORIGIN]
-    : [BROKEN_ORIGIN];
+      return callback(new Error(`CORS blocked: Origin not allowed: ${origin}`));
+    },
+    credentials: allowCredentials,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  })
+);
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error(`CORS blocked origin: ${origin}`), false);
-  },
-  credentials: true,
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "X-Debug-Header", "Authorization"]
-};
+// Explicit preflight handler (safe even though cors() also handles it)
+app.options("*", cors());
 
-app.use(cors(corsOptions));
-app.options(/.*/, cors(corsOptions));
-
-app.get("/api/ping", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
-    env: isProd ? "production" : "development",
-    mode: CORS_MODE,
+    message: "Backend is healthy",
     allowedOrigins,
+    allowCredentials
+  });
+});
+
+app.get("/api/hello", (req, res) => {
+  res.json({
+    message: "Hello from backend",
     time: new Date().toISOString()
   });
 });
 
-app.post("/api/login", (req, res) => {
-  res.cookie("session", "demo-session", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: isProd
+app.post("/api/echo", (req, res) => {
+  res.json({
+    received: req.body,
+    note: "If this works from the browser, your CORS is configured correctly."
   });
-  res.json({ ok: true, message: "Session cookie set" });
 });
 
-app.get("/api/me", (req, res) => {
-  res.json({ ok: true, hasSession: Boolean(req.cookies.session) });
-});
-
+// CORS error formatter (so you see the reason in the Network response)
 app.use((err, req, res, next) => {
-  console.error(err.message);
-  res.status(500).json({ ok: false, error: err.message });
+  if (err) {
+    return res.status(403).json({
+      ok: false,
+      error: err.message || "CORS error"
+    });
+  }
+  next();
 });
 
 app.listen(PORT, () => {
-  console.log(`Backend: http://localhost:${PORT}`);
-  console.log(`NODE_ENV=${process.env.NODE_ENV} | CORS_MODE=${CORS_MODE}`);
-  console.log(`Allowed origins: ${allowedOrigins.join(", ")}`);
+  console.log(`Backend running on http://localhost:${PORT}`);
+  console.log(`Allowed origins: ${allowedOrigins.length ? allowedOrigins.join(", ") : "(none)"}`);
 });
